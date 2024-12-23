@@ -7,7 +7,8 @@ minitop shows system metrics in a simple status-based interface:
 * Process information (total count, top CPU/memory consumers)
 * GPU metrics when available
 
-<img width="450" alt="Screenshot 2024-12-23 at 23 47 42" src="https://github.com/user-attachments/assets/eaa7e930-c66d-440f-a781-fb86648124a4" />
+<img width="1012" alt="Screenshot 2024-12-24 at 00 37 03" src="https://github.com/user-attachments/assets/901a7c2a-54da-4a4a-9358-083ffce70b6a" />
+
 
 # Install
 
