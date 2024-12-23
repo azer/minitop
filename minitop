@@ -3,15 +3,10 @@
 # minitop - Minimal system monitoring tool
 # Version: 1.0.0
 # Author: Azer Koçulu <azerkoculu@gmail.com>
-#
-# Usage: minitop [OPTIONS]
-# Options:
-#   -h, --help     Show this help message
-#   -v, --version  Show version
 
 VERSION="1.0.0"
 
-# Show help
+# Show help [same help function as before...]
 show_help() {
     cat << EOF
 minitop - Minimal system monitoring tool v${VERSION}
@@ -34,10 +29,7 @@ DISPLAY:
     PROCS          Total process count
     HIGH CPU       Top 3 CPU-consuming processes
     HIGH MEM       Top 3 memory-consuming processes
-    GPU            GPU utilization
-    GPU MEM        GPU memory usage
-    GPU TEMP       GPU temperature
-    GPU POWER      GPU power draw
+    GPU            GPU metrics (if available)
 
 COLORS:
     Green          OK (0-70%)
@@ -45,12 +37,7 @@ COLORS:
     Red            Critical (>90%)
 
 SHORTCUTS:
-    Ctrl+C         Exit minitop
-    Q              Exit
-    Esc            Q
-
-UPDATES:
-    Updates every 0.5 seconds
+    Q, Esc         Exit minitop
 EOF
     exit 0
 }
@@ -79,9 +66,7 @@ NC='\033[0m'
 
 tput civis
 trap 'tput cnorm; stty echo icanon; exit' INT TERM EXIT
-# Disable canonical mode (buffered input) and echo
 stty -icanon -echo
-
 clear
 
 get_status() {
@@ -95,28 +80,6 @@ get_status() {
     fi
 }
 
-# Get GPU status with custom thresholds
-get_gpu_status() {
-    value=$1
-    type=$2
-    
-    case $type in
-        "temp")
-            if [ $value -gt 80 ]; then
-                echo -e "${RED}CRITICAL${NC}"
-            elif [ $value -gt 70 ]; then
-                echo -e "${YELLOW}WARNING${NC}"
-            else
-                echo -e "${GREEN}OK${NC}"
-            fi
-            ;;
-        *)
-            get_status $value
-            ;;
-    esac
-}
-
-# Shorten process paths
 shorten_path() {
     echo "$1" | sed "s|$HOME|~|" | rev | cut -d'/' -f1 | rev
 }
@@ -125,33 +88,25 @@ shorten_path() {
 hostname=$(hostname)
 kernel=$(uname -r)
 uptime=$(uptime -p)
-echo "Host: $hostname ($kernel)"
-echo "Up: $uptime"
+printf "Host: %s (%s)\n" "$hostname" "$kernel"
+printf "Up: %s\n" "$uptime"
 echo "---"
-echo "CPU: "
-echo "RAM: "
-echo "SWAP: "
-echo "DISK: "
-echo "LOAD: "
-echo "TCP: "
-echo "FD: "    
-echo "PROCS: "
-echo "HIGH CPU: "
-echo "HIGH MEM: "
-if command -v nvidia-smi &> /dev/null; then
-    echo "GPU: "
-    echo "GPU MEM: "
-    echo "GPU TEMP: "
-    echo "GPU POWER: "
-else
-    echo -e "GPU: None"
-fi
+# Define format for metrics
+printf "%-12s %-8s %s\n" "CPU" "" ""
+printf "%-12s %-8s %s\n" "RAM" "" ""
+printf "%-12s %-8s %s\n" "SWAP" "" ""
+printf "%-12s %-8s %s\n" "DISK" "" ""
+printf "%-12s %-8s %s\n" "LOAD" "" ""
+printf "%-12s %-8s %s\n" "TCP" "" ""
+printf "%-12s %-8s %s\n" "FD" "" ""
+printf "%-12s %-8s %s\n" "PROCS" "" ""
+printf "%-12s %s\n" "HIGH CPU" ""
+printf "%-12s %s\n" "HIGH MEM" ""
+printf "%-12s %-8s %s\n" "GPU" "" ""
 
 while true; do
-  # Check for keyboard input
+    # Check for keyboard input
     read -t 0.5 -n 1 key 2>/dev/null
-    
-    # If Q or ESC (27) is pressed, exit
     if [[ $key = "q" ]] || [[ $key = "Q" ]] || [[ $key = $'\e' ]]; then
         exit 0
     fi
@@ -159,7 +114,7 @@ while true; do
     # Move cursor after static info
     tput cup 2 0
     echo "---"
-    
+
     # System metrics
     cpu=$(top -bn1 | grep "Cpu(s)" | awk '{print int($2)}')
     ram=$(free | grep Mem | awk '{print int($3/$2 * 100)}')
@@ -169,44 +124,35 @@ while true; do
     tcp=$(ss -s | awk '/TCP:/ {print $2}')
     fd=$(lsof | wc -l)
     procs=$(ps aux | wc -l)
-    
-    # Get top processes by CPU and memory
-    high_cpu=$(ps aux --sort=-%cpu | head -4 | tail -3 | awk '{print $11" "$3}' | while read proc cpu; do 
+
+    # Get top processes
+    high_cpu=$(ps aux --sort=-%cpu | head -4 | tail -3 | awk '{print $11" "$3}' | while read proc cpu; do
         printf "%s %.1f%%, " "$(shorten_path "$proc")" "$cpu"
     done | sed 's/, $//')
-    
-    high_mem=$(ps aux --sort=-%mem | head -4 | tail -3 | awk '{print $11" "$4}' | while read proc mem; do 
+
+    high_mem=$(ps aux --sort=-%mem | head -4 | tail -3 | awk '{print $11" "$4}' | while read proc mem; do
         printf "%s %.1f%%, " "$(shorten_path "$proc")" "$mem"
     done | sed 's/, $//')
-    
-    # Print updates
-    echo -e "CPU: ${cpu}% [$(get_status $cpu)]"
-    echo -e "RAM: ${ram}% [$(get_status $ram)]"
-    echo -e "SWAP: ${swap}% [$(get_status $swap)]"
-    echo -e "DISK: ${disk}% [$(get_status $disk)]"
-    echo -e "LOAD: ${load}% [$(get_status $load)]"
-    echo -e "TCP: ${tcp} [$(if [ $tcp -gt 1000 ]; then echo -e "${YELLOW}HIGH${NC}"; else echo -e "${GREEN}OK${NC}"; fi)]"
-    echo -e "FD: ${fd} [$(if [ $fd -gt 32768 ]; then echo -e "${YELLOW}HIGH${NC}"; else echo -e "${GREEN}OK${NC}"; fi)]"
-    echo -e "PROCS: ${procs} [$(if [ $procs -gt 300 ]; then echo -e "${YELLOW}HIGH${NC}"; else echo -e "${GREEN}OK${NC}"; fi)]"
-    echo -e "HIGH CPU: ${high_cpu}"
-    echo -e "HIGH MEM: ${high_mem}"
-    
+
+    # Print aligned metrics
+    # For metrics with percentages, use %2d to ensure 2-digit width
+printf "%-12s %-8s %2d%%\n" "CPU" "$(get_status $cpu)" $cpu
+printf "%-12s %-8s %2d%%\n" "RAM" "$(get_status $ram)" $ram
+printf "%-12s %-8s %2d%%\n" "SWAP" "$(get_status $swap)" $swap
+printf "%-12s %-8s %2d%%\n" "DISK" "$(get_status $disk)" $disk
+printf "%-12s %-8s %2d%%\n" "LOAD" "$(get_status $load)" $load
+    printf "%-12s %-8s %d\n" "TCP" "$(if [ $tcp -gt 1000 ]; then echo -e "${YELLOW}HIGH${NC}"; else echo -e "${GREEN}OK${NC}"; fi)" $tcp
+    printf "%-12s %-8s %d\n" "FD" "$(if [ $fd -gt 32768 ]; then echo -e "${YELLOW}HIGH${NC}"; else echo -e "${GREEN}OK${NC}"; fi)" $fd
+    printf "%-12s %-8s %d\n" "PROCS" "$(if [ $procs -gt 300 ]; then echo -e "${YELLOW}HIGH${NC}"; else echo -e "${GREEN}OK${NC}"; fi)" $procs
+    printf "%-12s %s\n" "HIGH CPU" "$high_cpu"
+    printf "%-12s %s\n" "HIGH MEM" "$high_mem"
+
     if command -v nvidia-smi &> /dev/null; then
-        # GPU metrics
         gpu_util=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)
-        gpu_mem_util=$(nvidia-smi --query-gpu=utilization.memory --format=csv,noheader,nounits)
-        gpu_temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits)
-        gpu_power=$(nvidia-smi --query-gpu=power.draw --format=csv,noheader,nounits 2>/dev/null || echo "N/A")
-        
-        echo -e "GPU: ${gpu_util}% [$(get_status $gpu_util)]"
-        echo -e "GPU MEM: ${gpu_mem_util}% [$(get_status $gpu_mem_util)]"
-        echo -e "GPU TEMP: ${gpu_temp}°C [$(get_gpu_status $gpu_temp temp)]"
-        if [ "$gpu_power" != "N/A" ]; then
-            echo -e "GPU POWER: ${gpu_power}W"
-        else
-            echo -e "GPU POWER: N/A"
-        fi
+        printf "%-12s %-8s %d%%\n" "GPU" "$(get_status $gpu_util)" $gpu_util
+    else
+        printf "%-12s %s\n" "GPU" "None"
     fi
-    
+
     sleep 0.5
 done
