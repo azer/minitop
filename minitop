@@ -148,11 +148,31 @@ printf "%-12s %-8s %2d%%\n" "LOAD" "$(get_status $load)" $load
     printf "%-12s %s\n" "HIGH MEM" "$high_mem"
 
     if command -v nvidia-smi &> /dev/null; then
-        gpu_util=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)
-        printf "%-12s %-8s %d%%\n" "GPU" "$(get_status $gpu_util)" $gpu_util
+    # Get GPU memory usage
+    mem_used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits)
+    mem_total=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
+    mem_percent=$((mem_used * 100 / mem_total))
+
+    # Get GPU utilization
+    gpu_util=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)
+
+    # Get GPU process info (name and memory usage)
+    gpu_process=$(nvidia-smi --query-compute-apps=pid,name,used_memory --format=csv,noheader | head -n1)
+    if [ ! -z "$gpu_process" ]; then
+        process_name=$(echo $gpu_process | cut -d',' -f2 | xargs basename)
+        process_mem=$(echo $gpu_process | cut -d',' -f3 | tr -d ' MiB')
     else
-        printf "%-12s %s\n" "GPU" "None"
+        process_name="None"
+        process_mem="0"
     fi
+
+    # Print GPU metrics with status colors
+    printf "%-12s %-8s %d%% (%dMiB/%dMiB)\n" "GPU MEM" "$(get_status $mem_percent)" $mem_percent $mem_used $mem_total
+    printf "%-12s %-8s %d%%\n" "GPU UTIL" "$(get_status $gpu_util)" $gpu_util
+    printf "%-12s %s (%dMiB)\n" "GPU PROC" "$process_name" $process_mem
+else
+    printf "%-12s %s\n" "GPU" "None"
+fi
 
     sleep 0.5
 done
